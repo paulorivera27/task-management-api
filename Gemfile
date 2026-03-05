@@ -46,6 +46,10 @@ group :development, :test do
 
   gem "graphiql-rails"
   gem "sprockets-rails"
+
+  gem "rspec-rails"
+  gem "factory_bot_rails"
+  gem "faker"
 end
 
 gem "graphql", "~> 2.5"
