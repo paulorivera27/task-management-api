@@ -2,14 +2,22 @@
 
 module Types
   class QueryType < Types::BaseObject
-    field :tasks, [ Types::TaskType ], null: false,
-      description: "Fetches a list of all tasks." do
+    field :tasks, Types::TasksResultType, null: false,
+      description: "Fetches a paginated list of tasks" do
       argument :status, Types::TaskStatusEnum, required: false,
         description: "Filter tasks by status."
+      argument :limit, Integer, required: false, default_value: 10,
+        description: "Number of tasks to return per page. It will default to 10."
+      argument :offset, Integer, required: false, default_value: 0,
+        description: "Number of tasks to skip. It will default to 0."
     end
 
-    def tasks(status: nil)
-     status ? Task.where(status: status) : Task.all
+    def tasks(status: nil, limit: 10, offset: 0)
+      scope = status ? Task.where(status: status) : Task.all
+      {
+        tasks: scope.order(created_at: :desc).limit(limit).offset(offset),
+        total_count: scope.count
+      }
     end
 
     field :task, Types::TaskType,
