@@ -5,6 +5,7 @@ FactoryBot.define do
     title { Faker::Lorem.sentence(word_count: 3) }
     description { Faker::Lorem.paragraph }
     status { :pending }
+    user
 
     trait :in_progress do
       status { :in_progress }
