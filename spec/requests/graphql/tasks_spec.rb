@@ -10,23 +10,39 @@ RSpec.describe "GraphQL Tasks", type: :request do
 
   describe "queries" do
     describe "tasks" do
-      it "returns all tasks" do
+      it "returns all tasks with pagination" do
         create_list(:task, 3)
-        result = query("{ tasks { id title status } }")
-        expect(result["data"]["tasks"].length).to eq(3)
+        result = query("{ tasks { tasks { id title status } totalCount } }")
+        expect(result["data"]["tasks"]["tasks"].length).to eq(3)
+        expect(result["data"]["tasks"]["totalCount"]).to eq(3)
+      end
+
+      it "paginates with limit/offset" do
+        create_list(:task, 5)
+        first_page = query("{ tasks(limit: 2, offset: 0) { tasks { id } totalCount } }")
+        expect(first_page["data"]["tasks"]["tasks"].length).to eq(2)
+        expect(first_page["data"]["tasks"]["totalCount"]).to eq(5)
+
+        second_page = query("{ tasks(limit: 2, offset: 2) { tasks { id } totalCount } }")
+        expect(second_page["data"]["tasks"]["tasks"].length).to eq(2)
+
+        last_page = query("{ tasks(limit: 2, offset: 4) { tasks { id } totalCount } }")
+        expect(last_page["data"]["tasks"]["tasks"].length).to eq(1)
       end
 
       it "filters tasks by status" do
         create_list(:task, 2)
         create(:task, :in_progress)
-        result = query("{ tasks(status: IN_PROGRESS) { id status } }")
-        expect(result["data"]["tasks"].length).to eq(1)
-        expect(result["data"]["tasks"].first["status"]).to eq("IN_PROGRESS")
+        result = query("{ tasks(status: IN_PROGRESS) { tasks { id status } totalCount } }")
+        expect(result["data"]["tasks"]["tasks"].length).to eq(1)
+        expect(result["data"]["tasks"]["tasks"].first["status"]).to eq("IN_PROGRESS")
+        expect(result["data"]["tasks"]["totalCount"]).to eq(1)
       end
 
-      it "returns empty array when no tasks exist" do
-        result = query("{ tasks { id } }")
-        expect(result["data"]["tasks"]).to eq([])
+      it "returns empty list when no tasks exist" do
+        result = query("{ tasks { tasks { id } totalCount } }")
+        expect(result["data"]["tasks"]["tasks"]).to eq([])
+        expect(result["data"]["tasks"]["totalCount"]).to eq(0)
       end
     end
 
