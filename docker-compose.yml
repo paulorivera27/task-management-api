@@ -19,5 +19,14 @@ services:
         condition: service_healthy
     env_file: ".env"
 
+  frontend:
+    build:
+      # both repositories must be in the same parent directory for this path to work
+      context: ../task-management-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
