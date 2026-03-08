@@ -13,7 +13,10 @@ module Types
     end
 
     def tasks(status: nil, limit: 10, offset: 0)
-      scope = status ? Task.where(status: status) : Task.all
+      user = context[:current_user] || raise(GraphQL::ExecutionError, "Authentication is required")
+
+      scope = user.tasks
+      scope = scope.where(status: status) if status
       {
         tasks: scope.order(created_at: :desc).limit(limit).offset(offset),
         total_count: scope.count
@@ -26,9 +29,18 @@ module Types
     end
 
     def task(id:)
-      task = Task.find_by(id: id)
-      return raise GraphQL::ExecutionError, "Task with ID #{id} not found." unless task
+      user = context[:current_user] || raise(GraphQL::ExecutionError, "Authentication is required")
+
+      task = user.tasks.find_by(id: id)
+      raise GraphQL::ExecutionError, "Task with ID #{id} not found." unless task
+
       task
+    end
+
+    field :current_user, Types::UserType, description: "returns the currently authenticated user."
+
+    def current_user
+      context[:current_user] || raise(GraphQL::ExecutionError, "Authentication required")
     end
   end
 end
