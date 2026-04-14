@@ -10,19 +10,19 @@ Now, going to the more technical side of things, this app can be run everywhere 
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Ruby on Rails 8.1.2 |
-| Language | Ruby 3.3.5 |
-| Database | PostgreSQL 16 |
-| API | GraphQL (~> 2.5), GraphiQL Interface is available when developing the app |
-| Auth | JWT (jwt gem) + bcrypt |
-| Server | Puma + Thruster (HTTP/2 proxy) (Rails 8 defaults) |
-| Testing | RSpec, FactoryBot, Faker |
-| Linting | RuboCop |
-| Security | Brakeman |
-| CI/CD | GitHub Actions (lint, security scan, test) |
-| Deploy | Docker, Docker Compose |
+| Layer     | Technology                                                                |
+| --------- | ------------------------------------------------------------------------- |
+| Framework | Ruby on Rails 8.1.2                                                       |
+| Language  | Ruby 3.3.5                                                                |
+| Database  | PostgreSQL 16                                                             |
+| API       | GraphQL (~> 2.5), GraphiQL Interface is available when developing the app |
+| Auth      | JWT (jwt gem) + bcrypt + HttpOnly refresh token cookies                   |
+| Server    | Puma + Thruster (HTTP/2 proxy) (Rails 8 defaults)                         |
+| Testing   | RSpec, FactoryBot, Faker                                                  |
+| Linting   | RuboCop                                                                   |
+| Security  | Brakeman                                                                  |
+| CI/CD     | GitHub Actions (lint, security scan, test)                                |
+| Deploy    | Docker, Docker Compose                                                    |
 
 ---
 
@@ -54,6 +54,7 @@ docker compose up --build
 ```
 
 Once the app is running:
+
 - **Frontend:** http://localhost:3000
 - **API endpoint:** http://localhost:4000/graphql
 
@@ -66,6 +67,7 @@ The backend entrypoint automatically runs `db:prepare` on startup, so the databa
 Now, lets talk about setting up the backend for development.
 
 **Prerequisites:**
+
 - Ruby 3.3.5 (recommended via [rbenv](https://github.com/rbenv/rbenv))
 - PostgreSQL 16 running locally
 - Bundler
@@ -105,15 +107,15 @@ cp .env.example .env
 
 You have to do that mainly because the SECRET_KEY_BASE which is needed by JWT and the App to initialize, so please run the command above before running any docker compose, below you will see an explanation of the existing variables:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `POSTGRES_USER` | `postgres` | PostgreSQL superuser (used by the `db` container) |
-| `POSTGRES_PASSWORD` | `postgres` | PostgreSQL superuser password |
-| `SECRET_KEY_BASE` | `insecure_key_for_dev` | Rails secret key (used for JWT signing). **Of course we need to replace this in production, but for demonstration purposes we used that value.** |
-| `DB_HOST` | `db` | Database host. no need for local dev. |
-| `DB_USERNAME` | `postgres` | Database connection username |
-| `DB_PASSWORD` | `postgres` | Database connection password |
-| `CORS_ORIGINS` | `http://localhost:3000` | Allowed CORS origin for the frontend |
+| Variable            | Default                 | Description                                                                                                                                      |
+| ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POSTGRES_USER`     | `postgres`              | PostgreSQL superuser (used by the `db` container)                                                                                                |
+| `POSTGRES_PASSWORD` | `postgres`              | PostgreSQL superuser password                                                                                                                    |
+| `SECRET_KEY_BASE`   | `insecure_key_for_dev`  | Rails secret key (used for JWT signing). **Of course we need to replace this in production, but for demonstration purposes we used that value.** |
+| `DB_HOST`           | `db`                    | Database host. no need for local dev.                                                                                                            |
+| `DB_USERNAME`       | `postgres`              | Database connection username                                                                                                                     |
+| `DB_PASSWORD`       | `postgres`              | Database connection password                                                                                                                     |
+| `CORS_ORIGINS`      | `http://localhost:3000` | Allowed CORS origin for the frontend                                                                                                             |
 
 ---
 
@@ -149,31 +151,40 @@ All operations go through a single endpoint: `POST /graphql`
 
 ### Queries
 
-| Query | Auth Required | Description |
-|-------|:---:|-------------|
-| `tasks(status, limit, offset)` | Yes | Paginated list of the current user's tasks. and it returns `{ tasks, totalCount }` |
-| `task(id)` | Yes | Single task by ID (scoped to current user) |
-| `currentUser` | Yes | Returns the authenticated user's profile |
+| Query                          | Auth Required | Description                                                                        |
+| ------------------------------ | :-----------: | ---------------------------------------------------------------------------------- |
+| `tasks(status, limit, offset)` |      Yes      | Paginated list of the current user's tasks. and it returns `{ tasks, totalCount }` |
+| `task(id)`                     |      Yes      | Single task by ID (scoped to current user)                                         |
+| `currentUser`                  |      Yes      | Returns the authenticated user's profile                                           |
 
 ### Mutations
 
-| Mutation | Auth Required | Description |
-|----------|:---:|-------------|
-| `signUp(email, password)` | No | Create account. Returns `{ token, user, errors }` |
-| `signIn(email, password)` | No | Authenticate. Returns `{ token, user, errors }` |
-| `createTask(title, description?, status?)` | Yes | Create a task. Defaults to `PENDING` status |
-| `updateTask(id, title?, description?, status?)` | Yes | Update a task (scoped to current user) |
-| `deleteTask(id)` | Yes | Delete a task (scoped to current user) |
+| Mutation                                        | Auth Required | Description                                                                                   |
+| ----------------------------------------------- | :-----------: | --------------------------------------------------------------------------------------------- |
+| `signUp(email, password)`                       |      No       | Create account. Returns `{ token, user, errors }` and sets an `HttpOnly` refresh token cookie |
+| `signIn(email, password)`                       |      No       | Authenticate. Returns `{ token, user, errors }` and sets an `HttpOnly` refresh token cookie   |
+| `createTask(title, description?, status?)`      |      Yes      | Create a task. Defaults to `PENDING` status                                                   |
+| `updateTask(id, title?, description?, status?)` |      Yes      | Update a task (scoped to current user)                                                        |
+| `deleteTask(id)`                                |      Yes      | Delete a task (scoped to current user)                                                        |
+
+### REST Auth Endpoints
+
+In addition to the GraphQL mutations, the following REST endpoints handle token refresh and logout:
+
+| Endpoint        | Method | Description                                                                                      |
+| --------------- | ------ | ------------------------------------------------------------------------------------------------ |
+| `/auth/refresh` | POST   | Reads the `HttpOnly` refresh token cookie and returns a new short-lived access token + user info |
+| `/auth/logout`  | DELETE | Revokes the refresh token server-side and clears the cookie                                      |
 
 ### Authentication
 
-Include the JWT token in the `Authorization` header:
+Include the JWT access token in the `Authorization` header:
 
 ```
 Authorization: Bearer <token>
 ```
 
-Tokens are valid for 24 hours and signed with HS256 using `SECRET_KEY_BASE`.
+**Access tokens** are valid for 15 minutes and signed with HS256 using `SECRET_KEY_BASE`. **Refresh tokens** are stored as SHA-256 hashes in the database, set as `HttpOnly` cookies, and valid for 7 days. When an access token expires, the frontend silently calls `/auth/refresh` to get a new one without requiring the user to log in again.
 
 ### Task Status Enum
 
@@ -186,7 +197,8 @@ Tokens are valid for 24 hours and signed with HS256 using `SECRET_KEY_BASE`.
 ```
 app/
 ├── controllers/
-│   └── graphql_controller.rb     # GraphQL endpoint ans JWT extraction
+│   ├── graphql_controller.rb     # GraphQL endpoint and JWT extraction
+│   └── auth_controller.rb        # REST endpoints for token refresh and logout
 ├── graphql/
 │   ├── mutations/
 │   │   ├── create_task.rb
@@ -202,10 +214,11 @@ app/
 │       ├── task_status_enum.rb
 │       └── user_type.rb
 ├── models/
+│   ├── refresh_token.rb           # HttpOnly refresh token (SHA-256 hashed, 7d expiry)
 │   ├── task.rb                    # belongs_to :user, enum status
 │   └── user.rb                    # has_secure_password, has_many :tasks
 └── services/
-    └── auth_token.rb              # JWT encode/decode (HS256, 24h expiry)
+    └── auth_token.rb              # JWT encode/decode (HS256, 15min expiry)
 
 spec/
 ├── factories/
@@ -225,10 +238,10 @@ spec/
 
 GitHub Actions runs three jobs on every push and pull request to `master`:
 
-| Job | What it does |
-|-----|-------------|
+| Job         | What it does                                                       |
+| ----------- | ------------------------------------------------------------------ |
 | `scan_ruby` | Brakeman (security analysis) + Bundler Audit (gem vulnerabilities) |
-| `lint` | RuboCop with caching |
-| `test` | RSpec against PostgreSQL 16 service container |
+| `lint`      | RuboCop with caching                                               |
+| `test`      | RSpec against PostgreSQL 16 service container                      |
 
 ---

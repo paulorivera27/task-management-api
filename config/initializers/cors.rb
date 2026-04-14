@@ -13,6 +13,12 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
 
     resource "/graphql",
       headers: :any,
-      methods: [ :post, :options ]
+      methods: [ :post, :options ],
+      credentials: true
+
+    resource "/auth/*",
+      headers: :any,
+      methods: [ :post, :delete, :options ],
+      credentials: true
   end
 end

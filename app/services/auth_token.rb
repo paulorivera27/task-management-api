@@ -2,7 +2,7 @@
 
 class AuthToken
   SECRET_KEY = Rails.application.secret_key_base
-  EXPIRATION = 24.hours.to_i
+  EXPIRATION = 15.minutes.to_i
 
   def self.encode(user_id)
     payload = {

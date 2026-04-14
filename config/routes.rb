@@ -1,6 +1,8 @@
 Rails.application.routes.draw do
   post "/graphql", to: "graphql#execute"
-  # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
+
+  post "/auth/refresh", to: "auth#refresh"
+  delete "/auth/logout", to: "auth#logout"
 
   if Rails.env.development?
     mount GraphiQL::Rails::Engine, at: "/graphiql", graphql_path: "/graphql"

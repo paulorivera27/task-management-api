@@ -1,19 +1,21 @@
 # frozen_string_literal: true
 
 class GraphqlController < ApplicationController
-  # If accessing from outside this domain, nullify the session
-  # This allows for outside API access while preventing CSRF attacks,
-  # but you'll have to authenticate your user separately
-  # protect_from_forgery with: :null_session
+  include RefreshCookie
 
   def execute
     variables = prepare_variables(params[:variables])
     query = params[:query]
     operation_name = params[:operationName]
+    refresh_cookie_data = {}
     context = {
-      current_user: current_user
+      current_user: current_user,
+      refresh_cookie_data: refresh_cookie_data
     }
     result = TaskManagementApiSchema.execute(query, variables: variables, context: context, operation_name: operation_name)
+
+    set_refresh_cookie(refresh_cookie_data) if refresh_cookie_data[:value]
+
     render json: result
   rescue StandardError => e
     raise e unless Rails.env.development?
