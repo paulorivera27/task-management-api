@@ -18,7 +18,7 @@ class RefreshToken < ApplicationRecord
       token_digest: Digest::SHA256.hexdigest(raw_token),
       expires_at: EXPIRATION.from_now
     )
-    [raw_token, refresh_token]
+    [ raw_token, refresh_token ]
   end
 
   def self.find_by_raw_token(raw_token)
