@@ -19,8 +19,8 @@ RSpec.describe "Auth Mutations", type: :request do
     it "creates a new user and returns a token" do
       post "/graphql", params: {
         query: query,
-        variables: { email: "new@example.com", password: "password123" }.to_json
-      }
+        variables: { email: "new@example.com", password: "password123" }
+      }, as: :json
 
       data = JSON.parse(response.body).dig("data", "signUp")
       expect(data["token"]).to be_present
@@ -33,8 +33,8 @@ RSpec.describe "Auth Mutations", type: :request do
 
       post "/graphql", params: {
         query: query,
-        variables: { email: "taken@example.com", password: "password123" }.to_json
-      }
+        variables: { email: "taken@example.com", password: "password123" }
+      }, as: :json
 
       data = JSON.parse(response.body).dig("data", "signUp")
       expect(data["token"]).to be_nil
@@ -44,8 +44,8 @@ RSpec.describe "Auth Mutations", type: :request do
     it "returns errors for invalid email" do
       post "/graphql", params: {
         query: query,
-        variables: { email: "not-an-email", password: "password123" }.to_json
-      }
+        variables: { email: "not-an-email", password: "password123" }
+      }, as: :json
 
       data = JSON.parse(response.body).dig("data", "signUp")
       expect(data["token"]).to be_nil
@@ -71,8 +71,8 @@ RSpec.describe "Auth Mutations", type: :request do
     it "returns a token for valid credentials" do
       post "/graphql", params: {
         query: query,
-        variables: { email: "test@example.com", password: "password123" }.to_json
-      }
+        variables: { email: "test@example.com", password: "password123" }
+      }, as: :json
 
       data = JSON.parse(response.body).dig("data", "signIn")
       expect(data["token"]).to be_present
@@ -83,8 +83,8 @@ RSpec.describe "Auth Mutations", type: :request do
     it "returns errors for wrong password" do
       post "/graphql", params: {
         query: query,
-        variables: { email: "test@example.com", password: "wrongpassword" }.to_json
-      }
+        variables: { email: "test@example.com", password: "wrongpassword" }
+      }, as: :json
 
       data = JSON.parse(response.body).dig("data", "signIn")
       expect(data["token"]).to be_nil
@@ -94,8 +94,8 @@ RSpec.describe "Auth Mutations", type: :request do
     it "returns errors for non-existent email" do
       post "/graphql", params: {
         query: query,
-        variables: { email: "ghost@example.com", password: "password123" }.to_json
-      }
+        variables: { email: "ghost@example.com", password: "password123" }
+      }, as: :json
 
       data = JSON.parse(response.body).dig("data", "signIn")
       expect(data["token"]).to be_nil
@@ -111,14 +111,15 @@ RSpec.describe "Auth Mutations", type: :request do
 
       post "/graphql",
         params: { query: "{ currentUser { id email } }" },
-        headers: { "Authorization" => "Bearer #{token}" }
+        headers: { "Authorization" => "Bearer #{token}" },
+        as: :json
 
       data = JSON.parse(response.body).dig("data", "currentUser")
       expect(data["email"]).to eq(user.email)
     end
 
     it "returns an error when not authenticated" do
-      post "/graphql", params: { query: "{ currentUser { id email } }" }
+      post "/graphql", params: { query: "{ currentUser { id email } }" }, as: :json
 
       result = JSON.parse(response.body)
       expect(result["errors"]).to be_present

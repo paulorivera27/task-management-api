@@ -2,6 +2,12 @@
 
 # If running the rails server then create or migrate existing database
 if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
+  # An unset SECRET_KEY_BASE falls back to Rails credentials, which need RAILS_MASTER_KEY.
+  if [ -n "${SECRET_KEY_BASE+x}" ] && { [ "${#SECRET_KEY_BASE}" -lt 64 ] || [ "${SECRET_KEY_BASE}" == "insecure_key_for_dev" ]; }; then
+    echo "SECRET_KEY_BASE must be at least 64 characters. Generate one with: openssl rand -hex 64" >&2
+    exit 1
+  fi
+
   ./bin/rails db:prepare
 fi
 

@@ -11,12 +11,10 @@ module Mutations
     field :errors, [ String ], null: false
 
     def resolve(id:, **attributes)
-      user = context[:current_user] || raise(GraphQL::ExecutionError, "Authentication is required")
+      user = authenticated_user!
 
       task = user.tasks.find_by(id: id)
       return { task: nil, errors: [ "Not found" ] } unless task
-
-      attributes.compact!
 
       if task.update(attributes)
         { task: task, errors: [] }

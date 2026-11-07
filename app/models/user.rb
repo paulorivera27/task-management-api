@@ -3,6 +3,7 @@ class User < ApplicationRecord
   has_many :tasks, dependent: :destroy
   has_many :refresh_tokens, dependent: :destroy
 
+  validates :password, length: { minimum: 8 }, allow_nil: true
   validates :email, presence: true, uniqueness: { case_sensitive: false }, format: { with: URI::MailTo::EMAIL_REGEXP }
 
   before_save :downcase_email

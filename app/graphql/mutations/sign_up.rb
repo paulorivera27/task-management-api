@@ -13,22 +13,12 @@ module Mutations
       user = User.new(email: email, password: password)
 
       if user.save
-        token = AuthToken.encode(user.id)
-        set_refresh_cookie(user)
-        { user: user, token:, errors: [] }
+        { user: user, token: start_session(user), errors: [] }
       else
         { user: nil, token: nil, errors: user.errors.full_messages }
       end
-    end
-
-    private
-
-    def set_refresh_cookie(user)
-      raw_token, _refresh_token = RefreshToken.generate_for(user)
-      context[:refresh_cookie_data].merge!(
-        value: raw_token,
-        expires: RefreshToken::EXPIRATION.from_now
-      )
+    rescue ActiveRecord::RecordNotUnique
+      { user: nil, token: nil, errors: [ "Email has already been taken" ] }
     end
   end
 end

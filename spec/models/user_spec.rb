@@ -35,6 +35,20 @@ RSpec.describe User, type: :model do
       user = build(:user, password: nil)
       expect(user).not_to be_valid
     end
+
+    it "rejects passwords shorter than 8 characters" do
+      user = build(:user, password: "short12")
+      expect(user).not_to be_valid
+      expect(user.errors[:password].join).to include("too short")
+    end
+
+    it "accepts an 8 character password" do
+      expect(build(:user, password: "exactly8")).to be_valid
+    end
+
+    it "rejects passwords over bcrypt's 72 byte limit" do
+      expect(build(:user, password: "a" * 73)).not_to be_valid
+    end
   end
 
   describe "associations" do
