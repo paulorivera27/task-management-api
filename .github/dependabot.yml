@@ -4,9 +4,28 @@ updates:
   directory: "/"
   schedule:
     interval: weekly
-  open-pull-requests-limit: 10
+  open-pull-requests-limit: 5
+  groups:
+    rails:
+      patterns: [ "rails", "action*", "active*", "railties", "rack*" ]
+    dev-tools:
+      patterns: [ "rubocop*", "brakeman", "bundler-audit", "rspec*", "factory_bot*", "faker", "debug" ]
 - package-ecosystem: github-actions
   directory: "/"
   schedule:
     interval: weekly
-  open-pull-requests-limit: 10
+- package-ecosystem: docker
+  directory: "/"
+  schedule:
+    interval: weekly
+  ignore:
+  # An existing data volume cannot start on a new Postgres major without a manual upgrade.
+  - dependency-name: postgres
+    update-types: [ "version-update:semver-major" ]
+- package-ecosystem: docker-compose
+  directory: "/"
+  schedule:
+    interval: weekly
+  ignore:
+  - dependency-name: postgres
+    update-types: [ "version-update:semver-major" ]
