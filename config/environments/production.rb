@@ -18,14 +18,18 @@ Rails.application.configure do
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
   # config.asset_host = "http://assets.example.com"
 
-  # Assume all access to the app is happening through a SSL-terminating reverse proxy.
-  # config.assume_ssl = true
+  # TLS terminates at the reverse proxy in front of the app. FORCE_SSL=false is only for the local HTTP demo.
+  ssl = ActiveModel::Type::Boolean.new.cast(ENV["FORCE_SSL"].presence || "true")
+  config.assume_ssl = ssl
+  config.force_ssl = ssl
 
-  # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
-  # config.force_ssl = true
-
-  # Skip http-to-https redirect for the default health check endpoint.
-  # config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }
+  # Rate limits key on request.remote_ip. Rails trusts every private-range hop by default, so clients on a
+  # LAN can spoof X-Forwarded-For. List your proxy addresses (comma-separated CIDRs) to trust only those.
+  # This replaces the defaults; loopback stays because Thruster reaches Puma over it.
+  if ENV["TRUSTED_PROXIES"].present?
+    config.action_dispatch.trusted_proxies = [ IPAddr.new("127.0.0.0/8"), IPAddr.new("::1") ] +
+      ENV["TRUSTED_PROXIES"].split(",").map(&:strip).compact_blank.map { |cidr| IPAddr.new(cidr) }
+  end
 
   # Log to STDOUT with the current request id as a default log tag.
   config.log_tags = [ :request_id ]
@@ -41,7 +45,14 @@ Rails.application.configure do
   config.active_support.report_deprecations = false
 
   # Replace the default in-process memory cache store with a durable alternative.
-  config.cache_store = :solid_cache_store
+  # Rate limits live in this cache. Transient cache errors skip rate limiting for that request (the app
+  # stays up), so log them. Rails already reports them to the error reporter. A missing or misconfigured
+  # cache database raises instead and returns 500.
+  config.cache_store = [ :solid_cache_store, {
+    error_handler: ->(method:, returning:, exception:) {
+      Rails.logger.error("cache #{method} failed, rate limits are not enforced: #{exception.class}: #{exception.message}")
+    }
+  } ]
 
   # Replace the default in-process and non-durable queuing backend for Active Job.
   config.active_job.queue_adapter = :solid_queue

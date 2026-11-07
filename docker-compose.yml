@@ -18,6 +18,9 @@ services:
       db:
         condition: service_healthy
     env_file: ".env"
+    environment:
+      # Local HTTP demo only. Real deployments terminate TLS at a proxy and leave this unset.
+      FORCE_SSL: "false"
 
   frontend:
     build:
