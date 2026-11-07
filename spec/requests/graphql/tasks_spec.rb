@@ -6,7 +6,7 @@ RSpec.describe "GraphQL Tasks", type: :request do
   let(:user) { create(:user) }
 
   def query(query_string, variables: {})
-    post "/graphql", params: { query: query_string, variables: variables.to_json }, headers: auth_headers(user)
+    post "/graphql", params: { query: query_string, variables: variables }, headers: auth_headers(user), as: :json
     JSON.parse(response.body)
   end
 

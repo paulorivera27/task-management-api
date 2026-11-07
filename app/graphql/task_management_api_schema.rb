@@ -25,6 +25,7 @@ class TaskManagementApiSchema < GraphQL::Schema
 
   # Limit the size of incoming queries:
   max_query_string_tokens(5000)
+  query_analyzer(Analyzers::SingleAuthMutation)
 
   # Stop validating when it encounters this many errors:
   validate_max_errors(100)

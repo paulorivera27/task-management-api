@@ -22,8 +22,7 @@ RSpec.describe Task, type: :model do
     end
 
     it "pending is the default status" do
-      task = create(:task)
-      expect(task.status).to eq("pending")
+      expect(Task.new.status).to eq("pending")
     end
   end
 end

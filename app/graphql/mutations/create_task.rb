@@ -10,7 +10,7 @@ module Mutations
     field :errors, [ String ], null: false
 
     def resolve(title:, description: nil, status: nil)
-      user = context[:current_user] || raise(GraphQL::ExecutionError, "Authentication is required")
+      user = authenticated_user!
 
       task = user.tasks.new(title: title, description: description, status: status || "pending")
 

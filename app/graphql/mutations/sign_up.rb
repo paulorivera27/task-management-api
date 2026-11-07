@@ -17,6 +17,8 @@ module Mutations
       else
         { user: nil, token: nil, errors: user.errors.full_messages }
       end
+    rescue ActiveRecord::RecordNotUnique
+      { user: nil, token: nil, errors: [ "Email has already been taken" ] }
     end
   end
 end

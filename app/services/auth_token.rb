@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class AuthToken
-  SECRET_KEY = Rails.application.secret_key_base
+  SECRET_KEY = Rails.application.key_generator.generate_key("access-token-jwt")
   EXPIRATION = 15.minutes.to_i
 
   def self.encode(user_id)
