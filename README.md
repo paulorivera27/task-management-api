@@ -13,7 +13,7 @@ Now, going to the more technical side of things, this app can be run everywhere 
 | Layer     | Technology                                                                |
 | --------- | ------------------------------------------------------------------------- |
 | Framework | Ruby on Rails 8.1.4                                                       |
-| Language  | Ruby 3.3.5                                                                |
+| Language  | Ruby 3.3.13                                                               |
 | Database  | PostgreSQL 16                                                             |
 | API       | GraphQL (~> 2.5), GraphiQL Interface is available when developing the app |
 | Auth      | JWT (jwt gem) + bcrypt + HttpOnly refresh token cookies                   |
@@ -69,7 +69,7 @@ Now, lets talk about setting up the backend for development.
 
 **Prerequisites:**
 
-- Ruby 3.3.5 (recommended via [rbenv](https://github.com/rbenv/rbenv))
+- Ruby 3.3.13 (recommended via [rbenv](https://github.com/rbenv/rbenv))
 - PostgreSQL 16 running locally
 - Bundler
 

@@ -12,7 +12,7 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Runners are pinned: ruby/setup-ruby has no Ruby 3.3.5 build for ubuntu-26.04, which ubuntu-latest now resolves to.
+# Runners are pinned so CI does not change when ubuntu-latest moves. On newer images ruby/setup-ruby only builds the newest patch of each Ruby series.
 jobs:
   scan_ruby:
     runs-on: ubuntu-24.04
