@@ -199,14 +199,14 @@ Authorization: Bearer <token>
 - Each login starts a token _family_. Every refresh issues a child token in the same family and marks the parent rotated. All changes to a family are serialized with a database advisory lock, so parallel refreshes cannot fork it.
 - Replaying a rotated token inside the 10 second window (parallel tabs, or a refresh response that never reached the browser) is tolerated: if none of its children has been used yet, the replay gets a sibling child (3 children per parent at most). Once a child is used, replays of the parent only get an access token, with no new cookie. Using one sibling retires the other siblings.
 - Replaying a rotated or retired token after the window is treated as theft: the whole family is revoked and the user must log in again. Whoever refreshes second loses.
-- Limits: the thief is only caught when the other side refreshes again, and a retired sibling can still obtain access tokens for the 10 seconds after its retirement. A refresh response lost in transit is only recovered if the client retries inside the window; the bundled frontend does not retry, so in practice siblings serve parallel tabs and React StrictMode. If three overlapping refreshes land out of order, the browser can end up holding a retired token and be logged out about 15 minutes later.
+- Limits: the thief is only caught when the other side refreshes again, and a retired sibling can still obtain access tokens for the 10 seconds after its retirement. A refresh response lost in transit is only recovered if the client retries inside the window; the bundled frontend sends one refresh at a time per tab (React StrictMode included) and retries once, 500 ms later, when the request itself failed, so siblings mostly serve parallel tabs. If three overlapping refreshes land out of order, the browser can end up holding a retired token and be logged out about 15 minutes later.
 - Idle expiry is 7 days, with an absolute session lifetime of 30 days. Logout revokes the whole family, and a daily job (`PruneRefreshTokensJob`, run by Solid Queue) deletes rows that can no longer be used.
 
 **Transport rules**
 
 - `POST /graphql` only accepts `Content-Type: application/json` (anything else gets `415`), which keeps cross-site form posts out.
 - Requests are rate limited per IP (60/min on `/graphql`, 120/min on `/auth/refresh`, `429` with `Retry-After`; see `TRUSTED_PROXIES` for clients on a private network) and only one `signIn`/`signUp` is allowed per GraphQL document.
-- Unauthenticated operations fail with the message `Authentication required` and `extensions.code = "UNAUTHENTICATED"`. The frontend relies on the exact message to trigger a refresh.
+- Unauthenticated operations fail with the message `Authentication required` and `extensions.code = "UNAUTHENTICATED"`. The frontend refreshes on the code and keeps the exact message only as a fallback, so the code is the stable part of the contract.
 
 Example (JSON body, arguments go inside `input`):
 
@@ -217,6 +217,20 @@ curl -i -X POST http://localhost:4000/graphql \
 ```
 
 Passwords must be at least 8 characters (bcrypt ignores anything past 72 bytes, so longer ones are rejected).
+
+### What the frontend depends on
+
+The [frontend](https://github.com/paulorivera27/task-management-frontend) is built against this behaviour; its README lists the same contract under [Working with the API](https://github.com/paulorivera27/task-management-frontend#working-with-the-api). Change one side and the other together.
+
+| API behaviour | Frontend reaction |
+| ------------- | ----------------- |
+| `extensions.code = "UNAUTHENTICATED"` on an operation | Refreshes the token and retries the operation once |
+| `POST /auth/refresh` returns `401` | Session is over: signs the user out and returns to the sign-in page |
+| `POST /auth/refresh` returns `429` or `5xx`, or the request fails | Keeps the session and shows an error (one retry after a network failure) |
+| Refresh cookie `HttpOnly`, `SameSite=Strict`, `Path=/auth`, set on the `signIn`/`signUp` response | Sends `credentials: "include"` on `/graphql`; reads no cookie itself |
+| `/graphql` accepts JSON only, 60 requests per minute per IP | Sends JSON; shows a translated message on `429` |
+| Validation failures in the mutation payload `errors` (HTTP 200) | Shows them and does not treat the save as successful; the messages listed in `src/lib/errors.ts` are translated, so reword them together |
+| Passwords of at least 8 characters, `tasks(limit: 1..100)` | Enforces the minimum on the form; pages of 10 |
 
 ### Production and TLS
 

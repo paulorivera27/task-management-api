@@ -3,7 +3,7 @@
 class AuthController < ApplicationController
   include RefreshCookie
 
-  # The frontend reads any non-2xx refresh as "logged out", so keep this well above normal reload rates.
+  # The frontend treats only 401 as "logged out"; a 429 keeps the session but shows an error, so keep this well above normal reload rates.
   rate_limit to: 120, within: 1.minute, only: :refresh, with: -> {
     response.set_header("Retry-After", "60")
     head :too_many_requests

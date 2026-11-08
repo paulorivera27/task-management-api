@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-# The frontend matches this exact message to trigger a token refresh (src/lib/apollo.ts).
+# The frontend refreshes the token on extensions.code UNAUTHENTICATED; it still accepts this exact message
+# as a fallback (task-management-frontend, src/lib/errors.ts).
 module AuthGuard
   UNAUTHENTICATED_MESSAGE = "Authentication required"
 
