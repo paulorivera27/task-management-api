@@ -12,7 +12,7 @@ Now, going to the more technical side of things, this app can be run everywhere 
 
 | Layer     | Technology                                                                |
 | --------- | ------------------------------------------------------------------------- |
-| Framework | Ruby on Rails 8.1.4                                                       |
+| Framework | Ruby on Rails 8.1.4.1                                                     |
 | Language  | Ruby 3.3.13                                                               |
 | Database  | PostgreSQL 16                                                             |
 | API       | GraphQL (~> 2.5), GraphiQL Interface is available when developing the app |
@@ -20,9 +20,9 @@ Now, going to the more technical side of things, this app can be run everywhere 
 | Server    | Puma + Thruster (HTTP/2 proxy) (Rails 8 defaults)                         |
 | Testing   | RSpec, FactoryBot, Faker                                                  |
 | Linting   | RuboCop                                                                   |
-| Security  | Brakeman                                                                  |
+| Security  | Brakeman, bundler-audit                                                   |
 | CI/CD     | GitHub Actions (lint, security scan, test)                                |
-| Deploy    | Docker, Docker Compose                                                    |
+| Deploy    | Docker, Docker Compose, Kamal                                             |
 
 ---
 
@@ -107,7 +107,7 @@ cp .env.example .env
 echo "SECRET_KEY_BASE=$(openssl rand -hex 64)" >> .env
 ```
 
-You have to do that mainly because the `SECRET_KEY_BASE` is needed by the app to initialize and to derive the JWT signing key. `.env.example` does not include a value on purpose: the container refuses to start when it is set to a short (under 64 characters) or placeholder value, so nobody can deploy with a publicly known signing secret. Below you will see an explanation of the existing variables:
+You have to do that mainly because the `SECRET_KEY_BASE` is needed by the app to initialize and to derive the JWT signing key. `.env.example` does not include a value on purpose: the container refuses to start when it is set to fewer than 64 characters or to the old `insecure_key_for_dev` placeholder, so nobody can deploy with a publicly known signing secret. Below you will see an explanation of the existing variables:
 
 | Variable            | Default                 | Description                                                                                                                                      |
 | ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -120,6 +120,7 @@ You have to do that mainly because the `SECRET_KEY_BASE` is needed by the app to
 | `CORS_ORIGINS`      | `http://localhost:3000` | Allowed CORS origin for the frontend (a single origin)                                                                                           |
 | `FORCE_SSL`         | `true`                  | Production only. `true` trusts the TLS-terminating proxy, adds HSTS and `Secure` cookies. `docker-compose.yml` sets `false` for the local HTTP demo. |
 | `TRUSTED_PROXIES`   | _(Rails defaults)_      | Production only. Comma-separated CIDRs of every proxy between the client and the app (loopback is always trusted). Rate limits use the client IP, and by default Rails trusts every private-range hop, so clients on a LAN that reach the app directly can spoof `X-Forwarded-For` and dodge the limits. Leave it unset behind Kamal's proxy. If you set it and miss a proxy, all clients share one rate-limit bucket. |
+| `SOLID_QUEUE_IN_PUMA` | _(unset)_             | Runs Solid Queue inside Puma so recurring jobs (the refresh-token cleanup) run. The Kamal deploy sets it, the Compose demo does not.               |
 | `REFRESH_COOKIE_SAMESITE` | `strict`          | `strict`, `lax` or `none`. Only use `none` (needs TLS) if the frontend lives on a different site than the API.                                   |
 
 ---
@@ -180,7 +181,7 @@ In addition to the GraphQL mutations, the following REST endpoints handle token 
 
 | Endpoint        | Method | Description                                                                                      |
 | --------------- | ------ | ------------------------------------------------------------------------------------------------ |
-| `/auth/refresh` | POST   | Reads the `HttpOnly` refresh token cookie, rotates it, and returns a new short-lived access token + user info |
+| `/auth/refresh` | POST   | Reads the `HttpOnly` refresh token cookie, rotates it (a replay inside the grace window gets a sibling token or only an access token, see below), and returns a new short-lived access token + user info |
 | `/auth/logout`  | DELETE | Revokes the whole refresh token family server-side and clears the cookie                                      |
 
 ### Authentication
@@ -195,12 +196,12 @@ Authorization: Bearer <token>
 
 **Refresh tokens** are single-use and rotate on every `/auth/refresh`:
 
-- Only the SHA-256 digest is stored. The raw value lives in an `HttpOnly` cookie scoped to `Path=/auth`, `SameSite=Strict` by default (`REFRESH_COOKIE_SAMESITE` overrides it), and `Secure` whenever the app runs behind TLS.
+- Only the SHA-256 digest is stored. The raw value lives in an `HttpOnly` cookie scoped to `Path=/auth`, `SameSite=Strict` by default (`REFRESH_COOKIE_SAMESITE` overrides it), and `Secure` whenever the request counts as HTTPS (`request.ssl?`, always true while `FORCE_SSL` is on).
 - Each login starts a token _family_. Every refresh issues a child token in the same family and marks the parent rotated. All changes to a family are serialized with a database advisory lock, so parallel refreshes cannot fork it.
 - Replaying a rotated token inside the 10 second window (parallel tabs, or a refresh response that never reached the browser) is tolerated: if none of its children has been used yet, the replay gets a sibling child (3 children per parent at most). Once a child is used, replays of the parent only get an access token, with no new cookie. Using one sibling retires the other siblings.
-- Replaying a rotated or retired token after the window is treated as theft: the whole family is revoked and the user must log in again. Whoever refreshes second loses.
+- Replaying a rotated or retired token after the window is treated as theft: the whole family is revoked and the user must log in again. Whoever refreshes second triggers the revocation, which ends both sessions (access tokens already issued stay valid for up to 15 minutes).
 - Limits: the thief is only caught when the other side refreshes again, and a retired sibling can still obtain access tokens for the 10 seconds after its retirement. A refresh response lost in transit is only recovered if the client retries inside the window; the bundled frontend sends one refresh at a time per tab (React StrictMode included) and retries once, 500 ms later, when the request itself failed, so siblings mostly serve parallel tabs. If three overlapping refreshes land out of order, the browser can end up holding a retired token and be logged out about 15 minutes later.
-- Idle expiry is 7 days, with an absolute session lifetime of 30 days. Logout revokes the whole family, and a daily job (`PruneRefreshTokensJob`, run by Solid Queue) deletes rows that can no longer be used.
+- Idle expiry is 7 days, with an absolute session lifetime of 30 days. Logout revokes the whole family. A daily job (`PruneRefreshTokensJob`) deletes rows past the 30 day lifetime or revoked more than a day ago; it runs inside Puma through Solid Queue when `SOLID_QUEUE_IN_PUMA` is set (the Kamal deploy sets it, the Compose demo does not).
 
 **Transport rules**
 
@@ -226,7 +227,7 @@ The [frontend](https://github.com/paulorivera27/task-management-frontend) is bui
 | ------------- | ----------------- |
 | `extensions.code = "UNAUTHENTICATED"` on an operation | Refreshes the token and retries the operation once |
 | `POST /auth/refresh` returns `401` | Session is over: signs the user out and returns to the sign-in page |
-| `POST /auth/refresh` returns `429` or `5xx`, or the request fails | Keeps the session and shows an error (one retry after a network failure) |
+| `POST /auth/refresh` returns `429` or `5xx`, or the request fails | Keeps the session and shows an error (one retry after a network failure). At startup the sign-in page is shown without a message, and a reload recovers |
 | Refresh cookie `HttpOnly`, `SameSite=Strict`, `Path=/auth`, set on the `signIn`/`signUp` response | Sends `credentials: "include"` on `/graphql`; reads no cookie itself |
 | `/graphql` accepts JSON only, 60 requests per minute per IP | Sends JSON; shows a translated message on `429` |
 | Validation failures in the mutation payload `errors` (HTTP 200) | Shows them and does not treat the save as successful; the messages listed in `src/lib/errors.ts` are translated, so reword them together |
@@ -234,7 +235,7 @@ The [frontend](https://github.com/paulorivera27/task-management-frontend) is bui
 
 ### Production and TLS
 
-In production the app expects TLS to terminate at a reverse proxy in front of it (Kamal proxy, nginx, Caddy, a cloud load balancer) that redirects HTTP to HTTPS and forwards `X-Forwarded-Proto`. With `FORCE_SSL` left at its default (`true`) the app trusts that proxy, sends HSTS, and marks the refresh cookie `Secure`. `docker-compose.yml` sets `FORCE_SSL=false` so the demo works over plain `http://localhost`. Remove that line for any real deployment, and never expose the demo stack to a network you do not control.
+In production the app expects TLS to terminate at a reverse proxy in front of it (Kamal proxy, nginx, Caddy, a cloud load balancer) that redirects HTTP to HTTPS. With `FORCE_SSL` left at its default (`true`) the app assumes every request arrived over HTTPS (it does not depend on `X-Forwarded-Proto`), sends HSTS, and marks the refresh cookie `Secure`. `docker-compose.yml` sets `FORCE_SSL=false` so the demo works over plain `http://localhost`. Remove that line for any real deployment, and never expose the demo stack to a network you do not control.
 
 Rate limits are stored in the Rails cache (Solid Cache in production). A transient cache error is logged (`cache increment failed, rate limits are not enforced`) and that request skips rate limiting, so the API stays up; a missing or misconfigured cache database returns a loud `500` instead. With more than one app instance the limits are shared through that database.
 
@@ -255,7 +256,7 @@ bin/kamal setup
 
 `bin/kamal config` validates the file without touching a server. A real deployment has not been run from this repository, so treat the first `setup` as the test.
 
-Migrations are written to survive a rolling deploy: new `refresh_tokens` columns have database defaults, so containers still running the previous version can keep inserting rows while the new ones start. The refresh-token migration holds a table lock while it backfills, which is instant at this table size.
+Migrations are written to survive a rolling deploy: the new NOT NULL `refresh_tokens` columns have database defaults, so containers still running the previous version can keep inserting rows while the new ones start. The refresh-token migration holds a table lock while it backfills; on a large table run it in a maintenance window.
 
 ### Task Status Enum
 
